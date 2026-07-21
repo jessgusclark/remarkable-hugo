@@ -9,13 +9,13 @@ Rules:
 - Transcribe exactly what is written. Do not correct grammar, spelling, or punctuation.
 - If a word is crossed out or scribbled over, skip it entirely.
 - Preserve paragraph breaks where the author clearly left space between sections.
-- Do not add any formatting (bold, italic, headers) unless the author explicitly indicated it.
+- Do not add any formatting (bold, italic, headers) unless the author explicitly indicated it (underline = italic, all caps = keep as all caps).
 - If a word is truly illegible, insert [illegible] rather than guessing.
 - Do not add anything the author did not write. No introductions, no sign-offs, no corrections.
 
 Respond with JSON only. No preamble, no markdown fences.
 
-{"title": "the post title as written", "body": "the full post body with paragraph breaks as newlines"}`;
+{"title": "the post title as written, without #", "body": "the full post body with paragraph breaks as newlines"}`;
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
