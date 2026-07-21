@@ -32,11 +32,11 @@ On startup the service validates all required env vars, clones (or pulls) the bl
 
 ### Mailgun route
 
-Create an inbound route in Mailgun: match your chosen recipient (e.g. `match_recipient("post@yourdomain.com")`) and forward to `https://<your-host>/webhook`. Mailgun retries non-2xx responses for 24 hours, so transient failures (Claude errors, push conflicts) self-heal.
+Create an inbound route in Mailgun: match your chosen recipient (e.g. `match_recipient("post@yourdomain.com")`) and forward to `https://<your-host>/webhook`.
 
 ## Behavior notes
 
-- The webhook processes synchronously: 200 means the post was pushed; 500 tells Mailgun to retry.
+- The webhook acks immediately: a 200 means the email passed validation (signature, sender, PDF present) and was **accepted for processing** — the Claude transcription and git push happen in the background, so Mailgun never waits on them. If the background pipeline fails, the error is logged and the post is not published; re-send the email from the reMarkable to retry.
 - Duplicate protection: repeated deliveries of the same Mailgun token are skipped, and a post whose `content/posts/YYYY-MM-DD-slug.md` already exists in the repo is treated as already published.
 - Multi-page PDFs: all pages are transcribed in one Claude call (first line of page 1 is the title); images are saved as `slug-1.png`, `slug-2.png`, …
 
@@ -59,4 +59,4 @@ curl -i http://localhost:3000/webhook \
   -F "attachment-1=@page.pdf;type=application/pdf"
 ```
 
-Expected: `published: content/posts/YYYY-MM-DD-<title>.md`, a new commit on the blog repo, and the post live after the Hugo deploy. Re-running the same command returns `duplicate: ...` with no second commit. A bad signature returns 401; a different `from` address returns `ignored`.
+Expected: an immediate `accepted [200]`, then `Published: content/posts/YYYY-MM-DD-<title>.md` in the server logs, a new commit on the blog repo, and the post live after the Hugo deploy. Re-running the same command logs `Already published` with no second commit. A bad signature returns 401; a different `from` address returns `ignored`.

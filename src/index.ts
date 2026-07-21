@@ -83,6 +83,10 @@ app.post("/webhook", upload.any(), async (req, res) => {
     seenTokens.delete(seenTokens.values().next().value!);
   }
 
+  // Ack immediately — Mailgun times out waiting on Claude-length calls.
+  // From here on, success/failure is only visible in the logs.
+  res.status(200).send("accepted");
+
   const run = pipelineQueue.then(async () => {
     const images = await pdfToImages(pdfFile.buffer);
     console.log(`Rendered ${images.length} page(s), transcribing...`);
@@ -96,17 +100,13 @@ app.post("/webhook", upload.any(), async (req, res) => {
     const result = await run;
     if (result.skipped) {
       console.log(`Already published: ${result.postPath}`);
-      res.status(200).send(`duplicate: ${result.postPath}`);
     } else {
       console.log(`Published: ${result.postPath}`);
-      res.status(200).send(`published: ${result.postPath}`);
     }
   } catch (error) {
-    // Allow Mailgun's retry to attempt this delivery again.
     seenTokens.delete(token!);
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`Pipeline failed: ${message}`);
-    res.status(500).send(`error: ${message}`);
+    console.error(`Pipeline failed (re-send the email to retry): ${message}`);
   }
 });
 
