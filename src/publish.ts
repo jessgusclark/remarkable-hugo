@@ -97,11 +97,13 @@ export async function publish(
   const imageMarkdown = imageNames
     .map((name) => `![handwritten page](/images/${name})`)
     .join("\n");
+  const tags = [...new Set(["handwritten", ...post.tags])];
+  const tagsYaml = tags.map((tag) => `  - ${tag}`).join("\n");
   const markdown = `---
 title: "${post.title.replace(/"/g, '\\"')}"
 date: ${timestamp}
 tags:
-  - handwritten
+${tagsYaml}
 draft: false
 ---
 
