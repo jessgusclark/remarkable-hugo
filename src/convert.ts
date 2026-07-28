@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { pdf } from "pdf-to-img";
 import { config } from "./config.js";
+import { extractTags } from "./tags.js";
 
 const SYSTEM_PROMPT = `You are converting a handwritten blog post into text for publication.
 
@@ -22,6 +23,7 @@ const client = new Anthropic({ apiKey: config.anthropicApiKey });
 export interface TranscribedPost {
   title: string;
   body: string;
+  tags: string[];
 }
 
 export async function pdfToImages(pdfBuffer: Buffer): Promise<Buffer[]> {
@@ -87,9 +89,10 @@ export async function transcribe(images: Buffer[]): Promise<TranscribedPost> {
     throw new Error("No text content in Claude response");
   }
 
-  const parsed = JSON.parse(text) as TranscribedPost;
+  const parsed = JSON.parse(text) as Omit<TranscribedPost, "tags">;
   if (!parsed.title.trim()) {
     throw new Error("Transcription produced an empty title");
   }
-  return parsed;
+  const { body, tags } = extractTags(parsed.body);
+  return { title: parsed.title, body, tags };
 }
