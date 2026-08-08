@@ -13,11 +13,10 @@ const upload = multer({
   limits: { fileSize: MAX_ATTACHMENT_BYTES },
 });
 
-/*
 function senderAddress(from: string): string {
   const match = from.match(/<([^>]+)>/);
   return (match ? match[1] : from).trim().toLowerCase();
-}*/
+}
 
 const allowedSenders = new Set(
   (config.allowedSender ?? "")
