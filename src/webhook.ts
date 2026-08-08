@@ -13,10 +13,18 @@ const upload = multer({
   limits: { fileSize: MAX_ATTACHMENT_BYTES },
 });
 
+/*
 function senderAddress(from: string): string {
   const match = from.match(/<([^>]+)>/);
   return (match ? match[1] : from).trim().toLowerCase();
-}
+}*/
+
+const allowedSenders = new Set(
+  (config.allowedSender ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+);
 
 // Tokens of deliveries we've already accepted, so a Mailgun retry (e.g. after
 // the forward timed out mid-pipeline) doesn't publish a duplicate.
@@ -38,7 +46,8 @@ webhookRouter.post("/webhook", upload.any(), async (req, res) => {
     return;
   }
 
-  if (senderAddress(from ?? "") !== config.allowedSender) {
+  //if (senderAddress(from ?? "") !== config.allowedSender) {
+  if (!allowedSenders.has(senderAddress(from ?? ""))) {
     console.log(`Ignoring email from unauthorized sender: ${from}`);
     res.status(200).send("ignored: sender not allowed");
     return;
