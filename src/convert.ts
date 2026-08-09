@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { pdf } from "pdf-to-img";
+import sharp from "sharp";
 import { config } from "./config.js";
 import { extractTags } from "./tags.js";
 
@@ -26,6 +27,33 @@ export interface TranscribedPost {
   tags: string[];
 }
 
+export interface Attachment {
+  buffer: Buffer;
+  mimetype: string;
+}
+
+const PDF_MIME_TYPE = "application/pdf" as const;
+
+// The image media types Claude's vision API accepts natively.
+const SUPPORTED_IMAGE_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+] as const;
+type SupportedImageMimeType = (typeof SUPPORTED_IMAGE_MIME_TYPES)[number];
+
+export const SUPPORTED_MIME_TYPES = new Set<string>([
+  PDF_MIME_TYPE,
+  ...SUPPORTED_IMAGE_MIME_TYPES,
+]);
+
+function isSupportedImageMimeType(
+  mimetype: string
+): mimetype is SupportedImageMimeType {
+  return (SUPPORTED_IMAGE_MIME_TYPES as readonly string[]).includes(mimetype);
+}
+
 export async function pdfToImages(pdfBuffer: Buffer): Promise<Buffer[]> {
   const document = await pdf(pdfBuffer, { scale: 2 });
   const images: Buffer[] = [];
@@ -38,9 +66,39 @@ export async function pdfToImages(pdfBuffer: Buffer): Promise<Buffer[]> {
   return images;
 }
 
-// All pages go in one request: the system prompt defines the first line of
-// handwriting as the title, which only holds across the whole document.
-export async function transcribe(images: Buffer[]): Promise<TranscribedPost> {
+// The attachment is sent to Claude as-is (native PDF document or image, not
+// rasterized), so Claude reads the whole document in one request: the system
+// prompt defines the first line of handwriting as the title, which only
+// holds across the whole document.
+export async function transcribe(
+  attachment: Attachment
+): Promise<TranscribedPost> {
+  const contentBlock =
+    attachment.mimetype === PDF_MIME_TYPE
+      ? {
+          type: "document" as const,
+          source: {
+            type: "base64" as const,
+            media_type: PDF_MIME_TYPE,
+            data: attachment.buffer.toString("base64"),
+          },
+        }
+      : (() => {
+          if (!isSupportedImageMimeType(attachment.mimetype)) {
+            throw new Error(
+              `Unsupported attachment type: ${attachment.mimetype}`
+            );
+          }
+          return {
+            type: "image" as const,
+            source: {
+              type: "base64" as const,
+              media_type: attachment.mimetype,
+              data: attachment.buffer.toString("base64"),
+            },
+          };
+        })();
+
   const response = await client.messages.create({
     model: "claude-sonnet-5",
     max_tokens: 16000,
@@ -63,14 +121,7 @@ export async function transcribe(images: Buffer[]): Promise<TranscribedPost> {
       {
         role: "user",
         content: [
-          ...images.map((image) => ({
-            type: "image" as const,
-            source: {
-              type: "base64" as const,
-              media_type: "image/png" as const,
-              data: image.toString("base64"),
-            },
-          })),
+          contentBlock,
           { type: "text" as const, text: "Convert this handwritten post." },
         ],
       },
@@ -95,4 +146,17 @@ export async function transcribe(images: Buffer[]): Promise<TranscribedPost> {
   }
   const { body, tags } = extractTags(parsed.body);
   return { title: parsed.title, body, tags };
+}
+
+// Rasterize the attachment into the page image(s) used for publishing. This
+// happens after transcription, not before, so Claude always sees the
+// original file rather than an inflated re-encoding of it.
+export async function attachmentToPageImages(
+  attachment: Attachment
+): Promise<Buffer[]> {
+  if (attachment.mimetype === PDF_MIME_TYPE) {
+    return pdfToImages(attachment.buffer);
+  }
+  const png = await sharp(attachment.buffer).png().toBuffer();
+  return [png];
 }

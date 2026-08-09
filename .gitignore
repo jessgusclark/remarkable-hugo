@@ -2,3 +2,4 @@ node_modules/
 dist/
 .env
 blog-repo/
+.DS_Store
