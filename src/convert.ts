@@ -157,6 +157,6 @@ export async function attachmentToPageImages(
   if (attachment.mimetype === PDF_MIME_TYPE) {
     return pdfToImages(attachment.buffer);
   }
-  const png = await sharp(attachment.buffer).png().toBuffer();
+  const png = await sharp(attachment.buffer).rotate().png().toBuffer();
   return [png];
 }
