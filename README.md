@@ -2,7 +2,7 @@
 
 A microservice that converts handwritten reMarkable tablet pages into published Hugo blog posts.
 
-Email a page from the reMarkable ("Send via email" as PDF) to a Mailgun-routed address. This service receives the Mailgun webhook, renders the PDF pages to images, has Claude transcribe the handwriting, generates a Hugo post with the transcription and the original page images, and pushes it to [jessgusclark/first-draft](https://github.com/jessgusclark/first-draft). GitHub Actions builds and deploys to [ashittyfirstdraft.xyz](https://ashittyfirstdraft.xyz).
+Email a page from the reMarkable ("Send via email" as PDF), or a photo of a handwritten page, to a Mailgun-routed address. This service receives the Mailgun webhook, sends the attachment to Claude directly (PDF or image) to transcribe the handwriting, then renders page images from it, generates a Hugo post with the transcription and those page images, and pushes it to [jessgusclark/first-draft](https://github.com/jessgusclark/first-draft). GitHub Actions builds and deploys to [ashittyfirstdraft.xyz](https://ashittyfirstdraft.xyz).
 
 ## Setup
 
@@ -36,9 +36,10 @@ Create an inbound route in Mailgun: match your chosen recipient (e.g. `match_rec
 
 ## Behavior notes
 
-- The webhook acks immediately: a 200 means the email passed validation (signature, sender, PDF present) and was **accepted for processing** — the Claude transcription and git push happen in the background, so Mailgun never waits on them. If the background pipeline fails, the error is logged and the post is not published; re-send the email from the reMarkable to retry.
+- The webhook acks immediately: a 200 means the email passed validation (signature, sender, supported attachment present) and was **accepted for processing** — the Claude transcription and git push happen in the background, so Mailgun never waits on them. If the background pipeline fails, the error is logged and the post is not published; re-send the email to retry.
 - Duplicate protection: repeated deliveries of the same Mailgun token are skipped, and a post whose `content/posts/YYYY-MM-DD-slug.md` already exists in the repo is treated as already published.
-- Multi-page PDFs: all pages are transcribed in one Claude call (first line of page 1 is the title); images are saved as `slug-1.png`, `slug-2.png`, …
+- Supported attachments: the first attachment matching a PDF (`application/pdf`) or an image Claude's vision API accepts natively (`image/jpeg`, `image/png`, `image/gif`, `image/webp`) is used; anything else is ignored. The attachment is sent to Claude as-is — a PDF is not rasterized before transcription.
+- Multi-page PDFs: all pages are transcribed in one Claude call (first line of page 1 is the title); page images are rendered afterward and saved as `slug-1.png`, `slug-2.png`, … Image attachments are single-page and saved as `slug.png` (normalized to PNG regardless of the original format).
 
 ## Testing without Mailgun
 
@@ -60,3 +61,5 @@ curl -i http://localhost:3000/webhook \
 ```
 
 Expected: an immediate `accepted [200]`, then `Published: content/posts/YYYY-MM-DD-<title>.md` in the server logs, a new commit on the blog repo, and the post live after the Hugo deploy. Re-running the same command logs `Already published` with no second commit. A bad signature returns 401; a different `from` address returns `ignored`.
+
+To test with a photo instead, swap the last line for `-F "attachment-1=@page.jpg;type=image/jpeg"` (also accepts `image/png`, `image/gif`, `image/webp`).
