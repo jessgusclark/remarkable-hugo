@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { config } from "./config.js";
-import { pdfToImages, transcribe } from "./convert.js";
+import { SUPPORTED_MIME_TYPES, attachmentToPageImages, transcribe } from "./convert.js";
 import { publish } from "./publish.js";
 import { verifySignature } from "./signature.js";
 
@@ -53,10 +53,10 @@ webhookRouter.post("/webhook", upload.any(), async (req, res) => {
   }
 
   const files = (req.files ?? []) as Express.Multer.File[];
-  const pdfFile = files.find((f) => f.mimetype === "application/pdf");
-  if (!pdfFile) {
-    console.log("Ignoring email with no PDF attachment");
-    res.status(200).send("ignored: no PDF attachment");
+  const attachmentFile = files.find((f) => SUPPORTED_MIME_TYPES.has(f.mimetype));
+  if (!attachmentFile) {
+    console.log("Ignoring email with no PDF or image attachment");
+    res.status(200).send("ignored: no PDF or image attachment");
     return;
   }
 
@@ -74,10 +74,14 @@ webhookRouter.post("/webhook", upload.any(), async (req, res) => {
   res.status(200).send("accepted");
 
   const run = pipelineQueue.then(async () => {
-    const images = await pdfToImages(pdfFile.buffer);
-    console.log(`Rendered ${images.length} page(s), transcribing...`);
-    const post = await transcribe(images);
-    console.log(`Transcribed "${post.title}", publishing...`);
+    const attachment = {
+      buffer: attachmentFile.buffer,
+      mimetype: attachmentFile.mimetype,
+    };
+    const post = await transcribe(attachment);
+    console.log(`Transcribed "${post.title}", rendering page image(s)...`);
+    const images = await attachmentToPageImages(attachment);
+    console.log(`Rendered ${images.length} page(s), publishing...`);
     return publish(post, images);
   });
   pipelineQueue = run.catch(() => {});
