@@ -24,8 +24,10 @@ On startup the service validates all required env vars, clones (or pulls) the bl
 | `ANTHROPIC_API_KEY` | Claude API key |
 | `MAILGUN_SIGNING_KEY` | Verifies inbound webhook signatures |
 | `GITHUB_PAT` | Push access to the blog repo |
-| `ALLOWED_SENDER` | The address your reMarkable sends from; other senders are ignored |
+| `ALLOWED_SENDERS` | The address(es) your reMarkable sends from — a single address or an array of addresses; other senders are ignored |
 | `BLOG_REPO_URL` | Blog repo clone URL |
+
+**Breaking change:** `ALLOWED_SENDER` was renamed to `ALLOWED_SENDERS` (now accepts a single value or an array). Update `.env` on the server (and your local `.env` from `.env.example`) before deploying.
 | `BLOG_REPO_BRANCH` | Branch to push to (default `main`) |
 | `PORT` | Server port (default `3000`) |
 | `REPO_DIR` | Local clone directory (default `./blog-repo`) |
