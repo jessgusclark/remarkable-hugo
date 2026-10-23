@@ -6,7 +6,7 @@ Email a page from the reMarkable ("Send via email" as PDF), or a photo of a hand
 
 ## Setup
 
-Requires Node 20+.
+Requires Node 20+
 
 ```sh
 npm install
