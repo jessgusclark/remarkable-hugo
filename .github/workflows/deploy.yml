@@ -1,0 +1,117 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  APP: remarkable-hugo
+  APP_GROUP: remarkablehugo
+  APP_PORT: "3001"
+
+jobs:
+  deploy:
+    # Matches the droplet (Ubuntu 24.04 x64): sharp and canvas ship native
+    # binaries, and the server never runs npm.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Build
+        run: |
+          npm ci
+          npm run build
+          npm test --if-present
+          npm ci --omit=dev
+          mkdir release
+          cp -r dist node_modules package.json package-lock.json release/
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          for v in DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_HOST DEPLOY_USER; do
+            [ -n "${!v}" ] || { echo "::error::$v is empty (Secrets vs Variables tab?)"; exit 1; }
+          done
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host server
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            BatchMode yes
+          EOF
+
+      - name: Upload release
+        run: |
+          rsync -rlt --mkpath --chmod=Du=rwx,Dgo=rx,Fu=rwX,Fgo=rX \
+            release/ "server:/srv/$APP/releases/$GITHUB_SHA/"
+
+      - name: Activate release
+        run: |
+          ssh server "bash -s -- $APP $APP_GROUP $APP_PORT $GITHUB_SHA" <<'EOF'
+          set -euo pipefail
+          app=$1 group=$2 port=$3 sha=$4
+          base=/srv/$app
+          rel=$base/releases/$sha
+
+          # /srv/<app> is the security boundary: app group, nothing for others.
+          perms=$(stat -c '%G %a' "$base")
+          if [ "$perms" != "$group 750" ]; then
+            echo "::error::$base is '$perms', want '$group 750'"; exit 1
+          fi
+          # The app user reads its release through the "other" bits.
+          bad=$(find "$rel" ! -perm -o=r -print -quit)
+          if [ -n "$bad" ]; then
+            echo "::error::not world-readable: $bad"; rm -rf "$rel"; exit 1
+          fi
+
+          prev=$(readlink "$base/current" || true)
+          ln -sfn "releases/$sha" "$base/current.tmp"
+          mv -Tf "$base/current.tmp" "$base/current"
+          sudo -n systemctl restart "$app.service"
+
+          ok=
+          for _ in $(seq 1 90); do
+            if curl -fsS --max-time 2 "http://127.0.0.1:$port/healthz" >/dev/null 2>&1; then
+              ok=1; break
+            fi
+            sleep 2
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::/healthz never answered, rolling back to '${prev:-none}'"
+            if [ -n "$prev" ]; then
+              ln -sfn "$prev" "$base/current.tmp"
+              mv -Tf "$base/current.tmp" "$base/current"
+              sudo -n systemctl restart "$app.service"
+            fi
+            exit 1
+          fi
+          echo "live: $sha"
+
+          # Keep the 5 newest releases, including the live one.
+          cd "$base/releases"
+          ls -1t | { grep -vxF "$sha" || true; } | tail -n +5 | xargs -r rm -rf --
+          EOF

@@ -1,0 +1,60 @@
+# Install (manual, CI can't touch this):
+#   sudo install -m 644 /tmp/remarkable-hugo.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+[Unit]
+Description=remarkable-hugo (Mailgun webhook -> handwritten Hugo post)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=remarkablehugo
+Group=remarkablehugo
+WorkingDirectory=/srv/remarkable-hugo/current
+ExecStart=/usr/bin/node dist/index.js
+EnvironmentFile=/etc/apps/remarkable-hugo.env
+Environment=NODE_ENV=production
+# git (via simple-git) wants a HOME; the app user has none.
+Environment=HOME=/var/lib/remarkable-hugo
+Environment=GIT_TERMINAL_PROMPT=0
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=180
+# SIGTERM waits for an in-flight post (Claude call + git push) to finish.
+TimeoutStopSec=180
+MemoryMax=1G
+
+# Blog repo clone lives here (/var/lib/remarkable-hugo, 700, app user only).
+StateDirectory=remarkable-hugo
+StateDirectoryMode=0700
+UMask=0077
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+# No MemoryDenyWriteExecute: breaks the V8 JIT.
+# Don't deny 127.0.0.0/8: systemd-resolved (127.0.0.53) does DNS.
+IPAddressDeny=169.254.0.0/16 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 fc00::/7
+
+[Install]
+WantedBy=multi-user.target
