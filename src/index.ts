@@ -17,7 +17,15 @@ app.use(webhookRouter);
 const server = await (async () => {
   console.log("Cloning/updating blog repo...");
   await initRepo();
-  return app.listen(config.port, config.host, () => {
+  // Express 5 hands listen errors (e.g. EADDRINUSE) to this callback instead
+  // of throwing; without the check the process logs "listening" and exits 0.
+  return app.listen(config.port, config.host, (error?: Error) => {
+    if (error) {
+      console.error(
+        `Failed to listen on ${config.host}:${config.port}: ${error.message}`
+      );
+      process.exit(1);
+    }
     console.log(
       `remarkable-blog listening on ${config.host}:${config.port}`
     );
