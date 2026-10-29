@@ -32,6 +32,11 @@ const seenTokens = new Set<string>();
 // One pipeline run at a time: concurrent runs would race the git working tree.
 let pipelineQueue: Promise<unknown> = Promise.resolve();
 
+// Resolves once every accepted email has finished (or failed) publishing.
+export function pipelineIdle(): Promise<unknown> {
+  return pipelineQueue;
+}
+
 export const webhookRouter = express.Router();
 
 webhookRouter.post("/webhook", upload.any(), async (req, res) => {
