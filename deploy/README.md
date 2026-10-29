@@ -12,7 +12,7 @@ deploys it to the old droplet. Nothing else calls this service.
 | Code | `/srv/remarkable-hugo/releases/<sha>`, `current` symlink |
 | Secrets | `/etc/apps/remarkable-hugo.env` (root:remarkablehugo 640) |
 | State | `/var/lib/remarkable-hugo/blog-repo` (clone of the blog, 700). Holds the PAT in `.git/config`. Safe to delete: the app reclones on start. |
-| Port | `127.0.0.1:3001` |
+| Port | `127.0.0.1:3002` (3000 is jesse-brain, 3001 is taken) |
 
 ## Operating
 
@@ -20,7 +20,7 @@ deploys it to the old droplet. Nothing else calls this service.
 sudo journalctl -u remarkable-hugo -f -o cat        # plain console.log, no jq
 sudo systemctl status remarkable-hugo
 sudo systemctl restart remarkable-hugo
-curl -s http://127.0.0.1:3001/healthz
+curl -s http://127.0.0.1:3002/healthz
 sudo readlink /srv/remarkable-hugo/current          # jesse can't see inside /srv/<app>
 ```
 

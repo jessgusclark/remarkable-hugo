@@ -55,7 +55,7 @@ ALLOWED_SENDER=
 BLOG_REPO_URL=https://github.com/developerjesse/first-draft.git
 BLOG_REPO_BRANCH=main
 HOST=127.0.0.1
-PORT=3001
+PORT=3002
 REPO_DIR=/var/lib/remarkable-hugo/blog-repo
 EOF
 fi
